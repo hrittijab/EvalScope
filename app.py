@@ -592,3 +592,54 @@ else:
 
         except ValueError as exc:
             st.warning(f"Ranking unavailable: {exc}")
+
+
+
+# ============================================================
+# AUTOMATED RESEARCH REPORT
+# ============================================================
+
+from evalscope.report import generate_report
+
+st.divider()
+st.header("Automated Research Report")
+
+st.write(
+    "Generate a reproducible Markdown research report "
+    "containing statistical findings and limitations."
+)
+
+if len(analysis_modes) >= 2:
+
+    if st.button("Generate Research Report", type="primary"):
+        try:
+            with st.spinner("Generating statistical report..."):
+                report_text = generate_report(
+                    df,
+                    mode_a=mode_a,
+                    mode_b=mode_b,
+                    n_bootstrap=2000,
+                    seed=42,
+                )
+
+            st.session_state["research_report"] = report_text
+
+        except ValueError as exc:
+            st.error(f"Report generation failed: {exc}")
+
+    if "research_report" in st.session_state:
+        st.download_button(
+            "Download Research Report (.md)",
+            data=st.session_state["research_report"],
+            file_name="evalscope_research_report.md",
+            mime="text/markdown",
+        )
+
+        with st.expander("Preview Research Report"):
+            st.markdown(st.session_state["research_report"])
+
+else:
+    st.info(
+        "Upload a dataset with at least two configurations "
+        "to generate a comparative research report."
+    )

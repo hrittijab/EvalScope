@@ -158,3 +158,265 @@ st.caption(
     "EvalScope | Experimental results are not guarantees "
     "of real-world model or defense performance."
 )
+
+
+
+# ============================================================
+# STATISTICAL ANALYSIS
+# ============================================================
+
+from evalscope.confidence import exact_binomial_interval
+from evalscope.paired_analysis import compare_defenses
+from evalscope.sensitivity import analyze_incomplete_trials
+
+
+st.divider()
+st.header("Statistical Analysis")
+
+st.info(
+    "Statistical results use the full uploaded dataset, "
+    "independently of the record-explorer filters above."
+)
+
+analysis_modes = sorted(df["mode"].unique().tolist())
+
+# ------------------------------------------------------------
+# 1. ATTACK SUCCESS RATES
+# ------------------------------------------------------------
+
+st.subheader("1. Attack Success Rates")
+
+rate_rows = []
+
+for mode in analysis_modes:
+    selected = df[
+        (df["mode"] == mode)
+        & (df["completed"])
+    ]
+
+    if selected.empty:
+        continue
+
+    successes = int(selected["attack_success"].sum())
+    trials = len(selected)
+
+    interval = exact_binomial_interval(
+        successes,
+        trials,
+    )
+
+    rate_rows.append({
+        "Configuration": mode,
+        "Completed Trials": trials,
+        "Successful Attacks": successes,
+        "Attack Success Rate (%)": round(
+            interval["rate"] * 100, 2
+        ),
+        "95% CI Lower (%)": round(
+            interval["ci_lower"] * 100, 2
+        ),
+        "95% CI Upper (%)": round(
+            interval["ci_upper"] * 100, 2
+        ),
+    })
+
+if rate_rows:
+    rate_df = pd.DataFrame(rate_rows)
+
+    st.dataframe(
+        rate_df,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.bar_chart(
+        rate_df.set_index("Configuration")[
+            "Attack Success Rate (%)"
+        ]
+    )
+
+    st.caption(
+        "Exact binomial confidence intervals assume "
+        "independent trials. Shared attack seeds can "
+        "violate this assumption."
+    )
+
+# ------------------------------------------------------------
+# 2. PAIRED DEFENSE COMPARISON
+# ------------------------------------------------------------
+
+st.divider()
+st.subheader("2. Paired Defense Comparison")
+
+if len(analysis_modes) >= 2:
+
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        mode_a = st.selectbox(
+            "Reference configuration",
+            analysis_modes,
+            index=0,
+            key="analysis_mode_a",
+        )
+
+    with col_b:
+        remaining = [
+            mode for mode in analysis_modes
+            if mode != mode_a
+        ]
+
+        mode_b = st.selectbox(
+            "Comparison configuration",
+            remaining,
+            key="analysis_mode_b",
+        )
+
+    n_resamples = st.slider(
+        "Bootstrap resamples",
+        min_value=500,
+        max_value=10000,
+        value=2000,
+        step=500,
+    )
+
+    try:
+        ordinary = compare_defenses(
+            df,
+            mode_a=mode_a,
+            mode_b=mode_b,
+            n_bootstrap=n_resamples,
+            cluster=False,
+        )
+
+        clustered = compare_defenses(
+            df,
+            mode_a=mode_a,
+            mode_b=mode_b,
+            n_bootstrap=n_resamples,
+            cluster=True,
+        )
+
+        st.metric(
+            "Paired Attack Success Reduction",
+            f"{ordinary['improvement'] * 100:.1f} pp",
+        )
+
+        st.metric(
+            "Completed Attack Pairs",
+            ordinary["n_pairs"],
+        )
+
+        comparison_df = pd.DataFrame([
+            {
+                "Method": "Ordinary paired bootstrap",
+                "Lower CI (pp)": round(
+                    ordinary["ci_lower"] * 100, 2
+                ),
+                "Upper CI (pp)": round(
+                    ordinary["ci_upper"] * 100, 2
+                ),
+            },
+            {
+                "Method": "Seed-cluster bootstrap",
+                "Lower CI (pp)": round(
+                    clustered["ci_lower"] * 100, 2
+                ),
+                "Upper CI (pp)": round(
+                    clustered["ci_upper"] * 100, 2
+                ),
+            },
+        ])
+
+        st.dataframe(
+            comparison_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        st.caption(
+            "Positive improvement means the comparison "
+            "configuration has a lower attack success rate. "
+            "Cluster bootstrap resamples source attack seeds."
+        )
+
+    except ValueError as exc:
+        st.warning(f"Comparison unavailable: {exc}")
+
+else:
+    st.warning(
+        "At least two configurations are required "
+        "for paired comparison."
+    )
+
+# ------------------------------------------------------------
+# 3. INCOMPLETE TRIAL SENSITIVITY
+# ------------------------------------------------------------
+
+st.divider()
+st.subheader("3. Incomplete-Trial Sensitivity")
+
+if len(analysis_modes) >= 2:
+
+    try:
+        sensitivity = analyze_incomplete_trials(
+            df,
+            mode_a=mode_a,
+            mode_b=mode_b,
+        )
+
+        c1, c2, c3 = st.columns(3)
+
+        c1.metric(
+            "Total Attack Pairs",
+            sensitivity["total_pairs"],
+        )
+
+        c2.metric(
+            "Completed Pairs",
+            sensitivity["completed_pairs"],
+        )
+
+        c3.metric(
+            "Incomplete Pairs",
+            sensitivity["incomplete_pairs"],
+        )
+
+        st.write("**Possible improvement under extreme assumptions**")
+
+        lower = sensitivity[
+            "worst_case_improvement"
+        ] * 100
+
+        upper = sensitivity[
+            "best_case_improvement"
+        ] * 100
+
+        bounds_df = pd.DataFrame([
+            {
+                "Scenario": "Worst case",
+                "Improvement (pp)": round(lower, 2),
+            },
+            {
+                "Scenario": "Best case",
+                "Improvement (pp)": round(upper, 2),
+            },
+        ])
+
+        st.dataframe(
+            bounds_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        st.caption(
+            "These are logical sensitivity bounds over all "
+            "attack pairs, not confidence intervals. "
+            "Completed-only estimates use a different denominator."
+        )
+
+    except ValueError as exc:
+        st.warning(f"Sensitivity analysis unavailable: {exc}")
+
+st.divider()
+st.caption("EvalScope — Reproducible LLM Benchmark Evaluation")

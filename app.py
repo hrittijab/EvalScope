@@ -420,3 +420,175 @@ if len(analysis_modes) >= 2:
 
 st.divider()
 st.caption("EvalScope — Reproducible LLM Benchmark Evaluation")
+
+
+
+# ============================================================
+# RANKING STABILITY DASHBOARD
+# ============================================================
+
+from evalscope.ranking import analyze_ranking_stability
+
+st.divider()
+st.header("Ranking Stability")
+
+st.write(
+    "How consistently does each configuration rank best "
+    "when benchmark attacks are resampled?"
+)
+
+available_modes = sorted(df["mode"].unique().tolist())
+
+if len(available_modes) < 2:
+    st.warning(
+        "Ranking analysis requires at least two configurations."
+    )
+
+else:
+    selected_ranking_modes = st.multiselect(
+        "Select configurations to compare",
+        options=available_modes,
+        default=available_modes,
+        key="ranking_modes",
+    )
+
+    ranking_resamples = st.slider(
+        "Ranking bootstrap resamples",
+        min_value=500,
+        max_value=10000,
+        value=2000,
+        step=500,
+        key="ranking_resamples",
+    )
+
+    ranking_method = st.radio(
+        "Resampling method",
+        options=[
+            "Seed-cluster bootstrap",
+            "Ordinary bootstrap",
+        ],
+        index=0,
+        horizontal=True,
+    )
+
+    if len(selected_ranking_modes) < 2:
+        st.info("Select at least two configurations.")
+
+    else:
+        try:
+            ranking = analyze_ranking_stability(
+                df,
+                modes=selected_ranking_modes,
+                n_bootstrap=ranking_resamples,
+                seed=42,
+                cluster=(
+                    ranking_method == "Seed-cluster bootstrap"
+                ),
+            )
+
+            st.subheader("Benchmark Coverage")
+
+            col1, col2, col3 = st.columns(3)
+
+            col1.metric(
+                "Common Completed Attacks",
+                ranking["n_common_attacks"],
+            )
+
+            col2.metric(
+                "Excluded Attacks",
+                ranking["n_excluded_attacks"],
+            )
+
+            col3.metric(
+                "Source Clusters",
+                ranking["n_source_clusters"],
+            )
+
+            st.subheader("Probability of Ranking Best")
+
+            ranking_rows = []
+
+            for mode in ranking["modes"]:
+                ranking_rows.append({
+                    "Configuration": mode,
+                    "Best-Rank Frequency (%)": round(
+                        ranking["best_rank_probability"][mode]
+                        * 100,
+                        2,
+                    ),
+                    "Average Rank": round(
+                        ranking["average_rank"][mode],
+                        2,
+                    ),
+                    "Observed ASR (%)": round(
+                        ranking["observed_success_rates"][mode]
+                        * 100,
+                        2,
+                    ),
+                })
+
+            ranking_df = pd.DataFrame(ranking_rows)
+
+            st.bar_chart(
+                ranking_df.set_index("Configuration")[
+                    "Best-Rank Frequency (%)"
+                ]
+            )
+
+            st.dataframe(
+                ranking_df,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.subheader("Pairwise Ranking Comparisons")
+
+            pairwise_rows = []
+
+            for comparison, probability in ranking[
+                "pairwise_win_probability"
+            ].items():
+                pairwise_rows.append({
+                    "Comparison": comparison,
+                    "Win Credit (%)": round(
+                        probability * 100,
+                        2,
+                    ),
+                })
+
+            st.dataframe(
+                pd.DataFrame(pairwise_rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.caption(
+                "Lower attack success rate ranks better. "
+                "Ties split ranking credit equally. "
+                "These frequencies describe bootstrap "
+                "resamples of the observed benchmark, "
+                "not calibrated probabilities of "
+                "future superiority."
+            )
+
+            # ----------------------------------------
+            # Download ranking results
+            # ----------------------------------------
+
+            import json
+
+            ranking_json = json.dumps(
+                ranking,
+                indent=2,
+            )
+
+            st.download_button(
+                "Download Ranking Analysis (JSON)",
+                data=ranking_json,
+                file_name="evalscope_ranking_analysis.json",
+                mime="application/json",
+            )
+
+        except ValueError as exc:
+            st.warning(f"Ranking unavailable: {exc}")

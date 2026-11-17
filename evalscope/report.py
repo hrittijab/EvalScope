@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from evalscope.cluster_diagnostics import leave_one_cluster_out
 from evalscope.confidence import exact_binomial_interval
-from evalscope.data_loader import paired_trials
 from evalscope.paired_analysis import compare_defenses
 from evalscope.ranking import analyze_ranking_stability
 from evalscope.sensitivity import analyze_incomplete_trials
@@ -25,7 +25,6 @@ def generate_report(
     if mode_a == mode_b:
         raise ValueError("Select two different configurations.")
 
-    # The analysis modules expect one experiment.
     experiment_ids = df["experiment_id"].dropna().unique()
 
     if len(experiment_ids) != 1:
@@ -88,6 +87,12 @@ def generate_report(
         n_bootstrap=n_bootstrap,
         seed=seed,
         cluster=True,
+    )
+
+    loco = leave_one_cluster_out(
+        selected,
+        mode_a=mode_a,
+        mode_b=mode_b,
     )
 
     def pct(value):
@@ -239,13 +244,60 @@ Bootstrap best-rank frequencies measure ranking stability
 under resampling of the observed benchmark. They are not
 calibrated probabilities of future superiority.
 
-## 7. Threats to Validity
+## 7. Leave-One-Cluster-Out Robustness Analysis
+
+This analysis evaluates how sensitive the observed paired
+improvement is to excluding individual source-attack seeds.
+
+Each source cluster is excluded once, and the paired
+improvement is recalculated using the remaining completed
+attack pairs.
+
+| Metric | Result |
+|---|---:|
+| Completed paired trials | {loco['n_pairs']} |
+| Source attack clusters | {loco['n_clusters']} |
+| Observed improvement | {pp(loco['observed_improvement'])} |
+| Minimum LOCO improvement | {pp(loco['min_loco_improvement'])} |
+| Maximum LOCO improvement | {pp(loco['max_loco_improvement'])} |
+| Largest absolute change | {pp(loco['max_absolute_change'])} |
+| All LOCO estimates positive | {loco['all_loco_positive']} |
+
+### Interpretation
+
+The observed paired reduction was
+**{pp(loco['observed_improvement'])}**.
+
+After excluding each source cluster individually, the
+estimated reduction ranged from
+**{pp(loco['min_loco_improvement'])}** to
+**{pp(loco['max_loco_improvement'])}**.
+
+The largest absolute change was
+**{pp(loco['max_absolute_change'])}**.
+
+A narrow LOCO range indicates limited sensitivity to
+any single observed source-attack seed.
+
+This analysis is a robustness diagnostic. It is not
+a confidence interval, a formal hypothesis test, or
+evidence of generalization to unseen attacks.
+
+## 8. Threats to Validity
 
 ### Dependence between attack cases
 
 Generated attacks can share source attack seeds. Treating
 all generated variants as independent can understate
 uncertainty.
+
+The seed-cluster bootstrap partially addresses this
+dependence. The leave-one-cluster-out analysis additionally
+examines whether individual source seeds dominate the
+observed effect.
+
+Neither method guarantees generalization to independent,
+previously unseen attacks.
 
 ### Incomplete evaluations
 
@@ -268,7 +320,11 @@ Cluster bootstrap intervals depend on the number and
 representativeness of source clusters. Small cluster
 counts can limit interval reliability.
 
-## 8. Reproducibility
+The exact binomial intervals are not cluster-adjusted.
+The conventional McNemar test assumes independent
+matched pairs.
+
+## 9. Reproducibility
 
 - Bootstrap resamples: {n_bootstrap}
 - Random seed: {seed}
@@ -276,6 +332,7 @@ counts can limit interval reliability.
 - Cluster unit: source attack ID
 - Completion requirement: completed and valid
 - Ranking direction: lower attack success is better
+- Robustness diagnostic: leave-one-source-cluster-out
 
 This report was generated automatically by EvalScope.
 

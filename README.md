@@ -90,6 +90,30 @@ Three classifiers were evaluated on completed, valid records using **five-fold s
 
 **Interpretation:** The models discriminate outcomes very well *within this benchmark*. Strong results are partly explained by pronounced outcome differences across attack categories and configurations. These models do not process attack text, and the experiment does not demonstrate transfer to new attack families, new LLMs, or unseen defense designs. Probability calibration is also assessed using out-of-fold calibration and distribution plots.
 
+
+## Dashboard Preview
+
+### Experiment Overview
+
+![Experiment Overview](docs/screenshots/ss1.png)
+
+### Statistical Analysis and Defense Effectiveness
+
+![Subgroup Effectiveness Analysis](docs/screenshots/ss2.png)
+
+### Predictive Model Comparison
+
+![Out-of-Fold Model Comparison](docs/screenshots/ss3.png)
+
+### Model Calibration
+
+![Out-of-Fold Model Calibration](docs/screenshots/ss4.png)
+
+### Predicted Probability Distributions
+
+![Prediction Distributions](docs/screenshots/ss5.png)
+
+
 ## Technology Stack
 
 Python, NumPy, pandas, SciPy, scikit-learn, Matplotlib, Streamlit, pytest.

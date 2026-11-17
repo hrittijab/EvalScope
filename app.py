@@ -35,7 +35,7 @@ uploaded = st.sidebar.file_uploader(
     type=["json"],
 )
 
-default_path = Path("data/agentsecbench_experiment.json")
+default_path = Path("data/demo_experiment.json")
 
 
 def load_uploaded_file(uploaded_file):

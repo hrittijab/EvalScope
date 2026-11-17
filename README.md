@@ -154,6 +154,31 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+
+## One-Command Reproducibility
+
+Generate the synthetic benchmark, statistical figures,
+research report, and experiment manifest:
+
+```bash
+python scripts/reproduce.py
+```
+
+Outputs are saved to `results/demo/`.
+
+The manifest records the dataset SHA-256 hash, selected
+configurations, random seed, and bootstrap settings.
+
+To analyze your own compatible benchmark:
+
+```bash
+python scripts/reproduce.py --dataset path/to/experiment.json --reference baseline --comparison defended
+```
+
+The synthetic demonstration is not evidence of actual LLM
+or security-defense performance.
+
+
 ## Run the Synthetic Demo
 
 Generate a reproducible synthetic dataset:

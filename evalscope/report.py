@@ -11,6 +11,7 @@ from evalscope.confidence import exact_binomial_interval
 from evalscope.paired_analysis import compare_defenses
 from evalscope.ranking import analyze_ranking_stability
 from evalscope.sensitivity import analyze_incomplete_trials
+from evalscope.subgroup_analysis import analyze_subgroups
 
 
 def generate_report(
@@ -95,6 +96,17 @@ def generate_report(
         mode_b=mode_b,
     )
 
+    subgroup_results = None
+    if "category" in selected.columns and selected["category"].notna().all():
+        subgroup_results = analyze_subgroups(
+            selected,
+            mode_a=mode_a,
+            mode_b=mode_b,
+            group_column="category",
+            n_bootstrap=n_bootstrap,
+            seed=seed,
+        )
+
     def pct(value):
         return f"{value * 100:.1f}%"
 
@@ -124,6 +136,52 @@ def generate_report(
             f"{pct(ranking['observed_success_rates'][mode])} | "
             f"{pct(ranking['best_rank_probability'][mode])} | "
             f"{ranking['average_rank'][mode]:.2f} |"
+        )
+
+    subgroup_section = """## 8. Subgroup Effectiveness Analysis
+
+Subgroup analysis was unavailable because the dataset does not
+contain complete attack-category labels.
+
+"""
+
+    if subgroup_results is not None:
+        subgroup_rows = []
+        for _, subgroup in subgroup_results.iterrows():
+            if pd.notna(subgroup["ci_lower"]):
+                ci_text = (
+                    f"{pp(subgroup['ci_lower'])} to "
+                    f"{pp(subgroup['ci_upper'])}"
+                )
+            else:
+                ci_text = "Unavailable"
+
+            warning = subgroup["warning"] or "None"
+            subgroup_rows.append(
+                f"| {subgroup['category']} "
+                f"| {subgroup['n_pairs']} "
+                f"| {subgroup['n_clusters']} "
+                f"| {pct(subgroup['baseline_asr'])} "
+                f"| {pct(subgroup['defended_asr'])} "
+                f"| {pp(subgroup['improvement'])} "
+                f"| {ci_text} "
+                f"| {warning} |"
+            )
+
+        subgroup_section = (
+            "## 8. Subgroup Effectiveness Analysis\n\n"
+            "This analysis compares configurations across attack categories "
+            "using completed matched pairs.\n\n"
+            "| Attack Category | Pairs | Source Clusters | Reference ASR | "
+            "Comparison ASR | Reduction | Cluster Bootstrap 95% CI | Warning |\n"
+            "|---|---:|---:|---:|---:|---:|---:|---|\n"
+            + "\n".join(subgroup_rows)
+            + "\n\nPositive reductions indicate lower attack success under "
+            "the comparison configuration.\n\n"
+            "Intervals use source-cluster bootstrap resampling within "
+            "each subgroup. They are exploratory, are not adjusted for "
+            "multiple comparisons, and can be unreliable with few clusters. "
+            "Zero-width intervals do not imply certainty about unseen attacks.\n\n"
         )
 
     generated_at = datetime.now(timezone.utc).strftime(
@@ -283,7 +341,7 @@ This analysis is a robustness diagnostic. It is not
 a confidence interval, a formal hypothesis test, or
 evidence of generalization to unseen attacks.
 
-## 8. Threats to Validity
+{subgroup_section}## 9. Threats to Validity
 
 ### Dependence between attack cases
 
@@ -324,7 +382,7 @@ The exact binomial intervals are not cluster-adjusted.
 The conventional McNemar test assumes independent
 matched pairs.
 
-## 9. Reproducibility
+## 10. Reproducibility
 
 - Bootstrap resamples: {n_bootstrap}
 - Random seed: {seed}

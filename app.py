@@ -2,6 +2,7 @@
 """EvalScope interactive benchmark analysis dashboard."""
 
 import json
+import hashlib
 import tempfile
 from pathlib import Path
 
@@ -67,6 +68,12 @@ try:
 except (ValueError, OSError, UnicodeError) as exc:
     st.error(f"Unable to load dataset: {exc}")
     st.stop()
+
+# Fingerprint the actual dataset, not only its experiment ID.
+# This prevents showing stale results after a different upload.
+dataset_fingerprint = hashlib.sha256(
+    pd.util.hash_pandas_object(df, index=True).values.tobytes()
+).hexdigest()
 
 st.sidebar.success("Dataset loaded")
 st.sidebar.caption(dataset_name)
@@ -632,6 +639,7 @@ if len(analysis_modes) >= 2:
             st.session_state["loco_modes"] = (
                 mode_a,
                 mode_b,
+                dataset_fingerprint,
             )
 
         except ValueError as exc:
@@ -642,7 +650,7 @@ if len(analysis_modes) >= 2:
     if (
         "loco_results" in st.session_state
         and st.session_state.get("loco_modes")
-        == (mode_a, mode_b)
+        == (mode_a, mode_b, dataset_fingerprint)
     ):
 
         loco = st.session_state["loco_results"]
@@ -882,6 +890,8 @@ if len(analysis_modes) >= 2:
             st.session_state["subgroup_modes"] = (
                 mode_a,
                 mode_b,
+                subgroup_bootstrap,
+                dataset_fingerprint,
             )
             st.session_state["subgroup_experiment"] = (
                 df["experiment_id"].astype(str).unique().tolist()
@@ -893,7 +903,7 @@ if len(analysis_modes) >= 2:
     if (
         "subgroup_results" in st.session_state
         and st.session_state.get("subgroup_modes")
-        == (mode_a, mode_b)
+        == (mode_a, mode_b, subgroup_bootstrap, dataset_fingerprint)
         and st.session_state.get("subgroup_experiment")
         == df["experiment_id"].astype(str).unique().tolist()
     ):
@@ -1096,6 +1106,119 @@ else:
 
 
 # ============================================================
+# PREDICTIVE MODELING AND CALIBRATION
+# ============================================================
+
+from evalscope.predictive_model import evaluate_predictive_models
+from evalscope.model_diagnostics import (
+    plot_calibration,
+    plot_probability_distributions,
+)
+
+st.divider()
+st.header("Predictive Modeling & Calibration")
+st.write(
+    "Compare out-of-fold attack-success predictions using "
+    "source-cluster-separated cross-validation."
+)
+st.caption(
+    "Only pre-execution category and configuration are used as "
+    "predictors. This is an exploratory within-benchmark analysis, "
+    "not a test of generalization to unseen attack types or defenses."
+)
+
+ml_folds = st.slider(
+    "Group-aware cross-validation folds",
+    min_value=2,
+    max_value=5,
+    value=5,
+    key="ml_folds",
+)
+ml_bins = st.slider(
+    "Calibration bins",
+    min_value=3,
+    max_value=15,
+    value=8,
+    key="ml_bins",
+)
+ml_key = (dataset_fingerprint, ml_folds)
+
+if st.button("Run Predictive Model Comparison", key="run_ml"):
+    try:
+        with st.spinner("Training and evaluating models across folds..."):
+            ml_results = evaluate_predictive_models(
+                df,
+                n_splits=ml_folds,
+                seed=42,
+            )
+        st.session_state["ml_results"] = ml_results
+        st.session_state["ml_key"] = ml_key
+    except (ValueError, RuntimeError) as exc:
+        st.session_state.pop("ml_results", None)
+        st.session_state.pop("ml_key", None)
+        st.error(f"Predictive modeling unavailable: {exc}")
+
+if (
+    "ml_results" in st.session_state
+    and st.session_state.get("ml_key") == ml_key
+):
+    ml_results = st.session_state["ml_results"]
+    metrics = ml_results["metrics"]
+    predictions = ml_results["predictions"]
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Completed records", ml_results["n_records"])
+    c2.metric("Source clusters", ml_results["n_clusters"])
+    c3.metric("CV folds", ml_results["n_splits"])
+
+    st.subheader("Out-of-Fold Model Comparison")
+    st.dataframe(
+        metrics.round(4),
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.caption(
+        "Lower Brier score and log loss are better. "
+        "Higher ROC-AUC and average precision are better. "
+        "Metrics are pooled across held-out folds."
+    )
+
+    st.subheader("Brier Score by Model")
+    st.bar_chart(metrics.set_index("model")["brier_score"])
+
+    st.subheader("Calibration Reliability Diagram")
+    calibration_fig = plot_calibration(predictions, n_bins=ml_bins)
+    st.pyplot(calibration_fig)
+    plt.close(calibration_fig)
+    st.caption(
+        "Each point represents a nonempty probability bin. "
+        "Sparse bins and repeated probabilities can make curves "
+        "look more certain than the data support."
+    )
+
+    st.subheader("Predicted Probability Distributions")
+    distribution_fig = plot_probability_distributions(predictions)
+    st.pyplot(distribution_fig)
+    plt.close(distribution_fig)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.download_button(
+            "Download Model Metrics (CSV)",
+            data=metrics.to_csv(index=False),
+            file_name="evalscope_model_metrics.csv",
+            mime="text/csv",
+        )
+    with c2:
+        st.download_button(
+            "Download Out-of-Fold Predictions (CSV)",
+            data=predictions.to_csv(index=False),
+            file_name="evalscope_oof_predictions.csv",
+            mime="text/csv",
+        )
+
+
+# ============================================================
 # AUTOMATED RESEARCH REPORT
 # ============================================================
 
@@ -1123,11 +1246,18 @@ if len(analysis_modes) >= 2:
                 )
 
             st.session_state["research_report"] = report_text
+            st.session_state["research_report_key"] = (
+                dataset_fingerprint, mode_a, mode_b
+            )
 
         except ValueError as exc:
             st.error(f"Report generation failed: {exc}")
 
-    if "research_report" in st.session_state:
+    if (
+        "research_report" in st.session_state
+        and st.session_state.get("research_report_key")
+        == (dataset_fingerprint, mode_a, mode_b)
+    ):
         st.download_button(
             "Download Research Report (.md)",
             data=st.session_state["research_report"],

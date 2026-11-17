@@ -17,7 +17,7 @@ from evalscope.data_loader import load_experiment
 from evalscope.report import generate_report, save_report
 from evalscope.visualize import plot_evaluation_summary
 from evalscope.ranking import analyze_ranking_stability
-from generate_demo import generate_demo
+from scripts.generate_demo import generate_demo
 
 
 def reproduce(

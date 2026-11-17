@@ -594,6 +594,246 @@ else:
             st.warning(f"Ranking unavailable: {exc}")
 
 
+# ============================================================
+# CLUSTER ROBUSTNESS ANALYSIS
+# ============================================================
+
+from evalscope.cluster_diagnostics import leave_one_cluster_out
+
+st.divider()
+st.header("Cluster Robustness Analysis")
+
+st.write(
+    "Evaluate whether the observed difference between "
+    "two configurations is sensitive to individual "
+    "source-attack clusters."
+)
+
+st.caption(
+    "Leave-One-Cluster-Out (LOCO) analysis removes one "
+    "source attack seed at a time and recalculates the "
+    "paired attack-success reduction."
+)
+
+if len(analysis_modes) >= 2:
+
+    if st.button("Run Cluster Robustness Analysis"):
+
+        try:
+            with st.spinner("Analyzing source clusters..."):
+
+                loco = leave_one_cluster_out(
+                    df,
+                    mode_a=mode_a,
+                    mode_b=mode_b,
+                )
+
+            st.session_state["loco_results"] = loco
+            st.session_state["loco_modes"] = (
+                mode_a,
+                mode_b,
+            )
+
+        except ValueError as exc:
+            st.error(
+                f"Cluster analysis unavailable: {exc}"
+            )
+
+    if (
+        "loco_results" in st.session_state
+        and st.session_state.get("loco_modes")
+        == (mode_a, mode_b)
+    ):
+
+        loco = st.session_state["loco_results"]
+
+        st.subheader("Robustness Summary")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                "Completed Pairs",
+                loco["n_pairs"],
+            )
+
+        with col2:
+            st.metric(
+                "Source Clusters",
+                loco["n_clusters"],
+            )
+
+        with col3:
+            st.metric(
+                "Observed Improvement",
+                f"{loco['observed_improvement'] * 100:.2f} pp",
+            )
+
+        with col4:
+            st.metric(
+                "Largest LOCO Change",
+                f"{loco['max_absolute_change'] * 100:.2f} pp",
+            )
+
+        st.subheader("Improvement Stability")
+
+        st.write(
+            f"After excluding individual source clusters, "
+            f"the estimated reduction ranged from "
+            f"**{loco['min_loco_improvement'] * 100:.2f}** "
+            f"to "
+            f"**{loco['max_loco_improvement'] * 100:.2f} "
+            f"percentage points**."
+        )
+
+        if loco["all_loco_positive"]:
+            st.success(
+                "The estimated improvement remained "
+                "positive after excluding every individual "
+                "source cluster."
+            )
+        else:
+            st.warning(
+                "At least one cluster exclusion produced "
+                "a non-positive improvement estimate."
+            )
+
+        # --------------------------------------------
+        # Cluster-level results
+        # --------------------------------------------
+
+        cluster_df = pd.DataFrame(
+            loco["cluster_results"]
+        )
+
+        cluster_df["Improvement (pp)"] = (
+            cluster_df["improvement"] * 100
+        )
+
+        cluster_df["Change (pp)"] = (
+            cluster_df["change_from_observed"] * 100
+        )
+
+        st.subheader(
+            "Leave-One-Cluster-Out Estimates"
+        )
+
+        st.caption(
+            "Each point represents the estimated reduction "
+            "after removing one source attack seed."
+        )
+
+        # --------------------------------------------
+        # Visualization
+        # --------------------------------------------
+
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(
+            figsize=(10, 5)
+        )
+
+        chart_df = cluster_df.sort_values(
+            "Improvement (pp)"
+        )
+
+        ax.scatter(
+            chart_df["excluded_cluster"],
+            chart_df["Improvement (pp)"],
+            color="#2563eb",
+            s=45,
+            label="LOCO estimate",
+        )
+
+        ax.axhline(
+            y=loco["observed_improvement"] * 100,
+            color="#dc2626",
+            linestyle="--",
+            linewidth=2,
+            label="Observed improvement",
+        )
+
+        ax.set_xlabel("Excluded Source Cluster")
+        ax.set_ylabel("Attack Success Reduction (pp)")
+
+        ax.set_title(
+            "Sensitivity to Individual Source Clusters"
+        )
+
+        ax.tick_params(
+            axis="x",
+            rotation=90,
+        )
+
+        ax.legend()
+        ax.grid(
+            axis="y",
+            alpha=0.25,
+        )
+
+        fig.tight_layout()
+
+        st.pyplot(fig)
+
+        plt.close(fig)
+
+        # --------------------------------------------
+        # Detailed table
+        # --------------------------------------------
+
+        with st.expander(
+            "View Cluster-Level Results"
+        ):
+
+            st.dataframe(
+                cluster_df[
+                    [
+                        "excluded_cluster",
+                        "remaining_pairs",
+                        "Improvement (pp)",
+                        "Change (pp)",
+                    ]
+                ].rename(
+                    columns={
+                        "excluded_cluster":
+                            "Excluded Cluster",
+                        "remaining_pairs":
+                            "Remaining Pairs",
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        # --------------------------------------------
+        # CSV download
+        # --------------------------------------------
+
+        csv_data = cluster_df.to_csv(
+            index=False
+        )
+
+        st.download_button(
+            "Download Cluster Robustness Results (CSV)",
+            data=csv_data,
+            file_name="evalscope_cluster_robustness.csv",
+            mime="text/csv",
+        )
+
+        st.caption(
+            "LOCO is a sensitivity diagnostic, not a "
+            "confidence interval or formal significance "
+            "test. Stability within the observed benchmark "
+            "does not establish generalization to unseen "
+            "attacks."
+        )
+
+else:
+    st.info(
+        "Upload a dataset with at least two configurations "
+        "to run cluster robustness analysis."
+    )
+
 
 # ============================================================
 # AUTOMATED RESEARCH REPORT

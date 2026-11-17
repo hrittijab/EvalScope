@@ -12,6 +12,7 @@ from evalscope.paired_analysis import compare_defenses
 from evalscope.ranking import analyze_ranking_stability
 from evalscope.sensitivity import analyze_incomplete_trials
 from evalscope.subgroup_analysis import analyze_subgroups
+from evalscope.predictive_model import evaluate_predictive_models
 
 
 def generate_report(
@@ -95,6 +96,26 @@ def generate_report(
         mode_a=mode_a,
         mode_b=mode_b,
     )
+    # Predictive modeling is supplementary: small datasets should still
+    # produce the statistical research report.
+    ml_rows = []
+    ml_unavailable = None
+    try:
+        predictive = evaluate_predictive_models(
+            selected,
+            n_splits=5,
+            seed=seed,
+        )
+        for _, result in predictive["metrics"].iterrows():
+            ml_rows.append(
+                f"| {result['model']} "
+                f"| {result['roc_auc']:.4f} "
+                f"| {result['average_precision']:.4f} "
+                f"| {result['brier_score']:.4f} "
+                f"| {result['log_loss']:.4f} |"
+            )
+    except ValueError as exc:
+        ml_unavailable = str(exc)
 
     subgroup_results = None
     if "category" in selected.columns and selected["category"].notna().all():
@@ -341,7 +362,47 @@ This analysis is a robustness diagnostic. It is not
 a confidence interval, a formal hypothesis test, or
 evidence of generalization to unseen attacks.
 
-{subgroup_section}## 9. Threats to Validity
+{subgroup_section}## 9. Predictive Machine Learning Evaluation
+
+When supported by the dataset, three models are evaluated using five-fold
+stratified group cross-validation:
+
+- Constant-probability baseline
+- Logistic Regression
+- Random Forest
+
+Only information available before attack execution
+was used as predictive features:
+
+- Attack category
+- Evaluation configuration
+
+Source attack IDs were used exclusively for
+cross-validation grouping.
+
+| Model | ROC-AUC | Average Precision | Brier Score | Log Loss |
+|---|---:|---:|---:|---:|
+{chr(10).join(ml_rows) if ml_rows else "| Unavailable | — | — | — | — |"}
+
+### Interpretation
+
+Higher ROC-AUC and average precision indicate
+better discrimination.
+
+Lower Brier score and log loss indicate better
+probability predictions.
+
+{f"Predictive evaluation unavailable: {ml_unavailable}" if ml_unavailable else "Metrics are calculated from pooled out-of-fold predictions, with source attack clusters separated between training and validation folds."}
+
+These findings describe predictive performance
+within the observed benchmark.
+
+The experiment does not establish generalization
+to new attack categories, unseen language models,
+or substantially different defense configurations.
+
+
+## 10. Threats to Validity
 
 ### Dependence between attack cases
 
@@ -382,7 +443,8 @@ The exact binomial intervals are not cluster-adjusted.
 The conventional McNemar test assumes independent
 matched pairs.
 
-## 10. Reproducibility
+
+## 11. Reproducibility
 
 - Bootstrap resamples: {n_bootstrap}
 - Random seed: {seed}
@@ -391,6 +453,10 @@ matched pairs.
 - Completion requirement: completed and valid
 - Ranking direction: lower attack success is better
 - Robustness diagnostic: leave-one-source-cluster-out
+- Predictive validation: five-fold stratified group cross-validation
+- Predictive grouping: source attack ID
+- Predictive features: attack category and configuration
+- Predictive random seed: {seed}
 
 This report was generated automatically by EvalScope.
 

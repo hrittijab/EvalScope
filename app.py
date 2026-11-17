@@ -14,6 +14,10 @@ from evalscope.data_loader import (
     summarize_experiment,
 )
 
+from evalscope.six_defense_dashboard import render_six_defense_dashboard
+
+from evalscope.sst2_dashboard import render_sst2_dashboard
+
 
 st.set_page_config(
     page_title="EvalScope | LLM Evaluation",
@@ -1273,3 +1277,14 @@ else:
         "Upload a dataset with at least two configurations "
         "to generate a comparative research report."
     )
+
+# ============================================================
+# SIX-DEFENSE SECURITY–UTILITY ANALYSIS
+# ============================================================
+
+st.divider()
+render_six_defense_dashboard()
+
+
+st.divider()
+render_sst2_dashboard()

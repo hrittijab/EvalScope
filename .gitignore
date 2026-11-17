@@ -1,14 +1,23 @@
+# Python environment and caches
 .venv/
 __pycache__/
 .pytest_cache/
 *.pyc
 
+# Environment variables and notebooks
 .env
 .ipynb_checkpoints/
 
+# Generated results
 results/*
 !results/.gitkeep
 
+# Ignore datasets by default
 data/*
 !data/.gitkeep
 !data/demo_experiment.json
+
+# Reproducible evaluation datasets
+!data/sst2_predictions.csv
+!data/six_defense_comparison.json
+!data/benign_six_defense_comparison.json

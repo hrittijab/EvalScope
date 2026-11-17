@@ -1,5 +1,15 @@
 # EvalScope
 
+## Key Finding
+
+In an AgentSecBench case study involving 120 matched attacks from 30 source attack seeds, a deterministic authorization-policy defense reduced observed attack success from **61.7% to 0.0%** across 94 completed matched pairs.
+
+The estimated reduction was 61.7 percentage points (source-cluster bootstrap 95% CI: approximately 56.9–65.9 percentage points). Accounting for 26 incomplete pairs, extreme missing-outcome assumptions produced improvement bounds of 35.8–65.8 percentage points.
+
+**The defense also preserved 100% benign-task success (15/15), matching the baseline (15/15), with no observed utility loss on the tested legitimate tasks.**
+
+These results support the effectiveness of the authorization policy within the evaluated benchmark. Generalization remains limited by the single underlying LLM, 30 source attack seeds, and a small benign-task suite.
+
 ### Statistical Reliability, Robustness, and Predictive Modeling for LLM Benchmarks
 
 EvalScope is a Python framework for evaluating how reliable conclusions from large language model (LLM) benchmarks are. Rather than relying on a single accuracy or attack-success number, it examines uncertainty, paired outcomes, incomplete evaluations, ranking stability, subgroup differences, and predictive-model calibration.

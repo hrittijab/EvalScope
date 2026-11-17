@@ -1,16 +1,10 @@
 # EvalScope
 
-
 **Statistical Evaluation, Reliability Analysis, and Robustness Testing for AI Systems**
 
-EvalScope is a Python-based evaluation framework for measuring the
-reliability of AI systems through statistical inference, uncertainty
-quantification, robustness analysis, and predictive modeling.
+EvalScope is a Python-based evaluation framework for measuring the reliability of AI systems through statistical inference, uncertainty quantification, robustness analysis, and predictive modeling.
 
-Instead of reporting a single accuracy or attack-success score,
-EvalScope investigates whether observed improvements are statistically
-credible, how sensitive conclusions are to evaluation design, and
-whether model confidence reflects actual correctness.
+Instead of reporting a single accuracy or attack-success score, EvalScope investigates whether observed improvements are statistically credible, how sensitive conclusions are to evaluation design, and whether model confidence reflects actual correctness.
 
 ### Evaluation Tracks
 
@@ -28,62 +22,24 @@ whether model confidence reflects actual correctness.
 - **Predictive modeling** with group-aware cross-validation and probability calibration.
 - **Interactive Streamlit dashboard** for exploring evaluation results.
 - **Reproducible benchmark artifacts** with documented statistical limitations.
-```
 
-Keep your existing `## Key Finding` and AgentSecBench sections. We'll reorganize them later if necessary.
+## Key Findings
 
-### Step 2 — Update the repository layout
+### Six-defense security–utility tradeoff (separate experiment)
 
-In your existing `## Repository Layout` code block, add these entries under `evalscope/`:
+Across **30 matched attack scenarios per configuration** and **50 benign tasks per configuration**, EvalScope compared six AI-agent security configurations. The baseline succeeded on **7/30 attacks (23.3%)**, while authorization, layered, and ML-layered defenses each had **0/30 observed attack successes**. Prompt guard and ML-only each had **1/30 (3.3%)**. Legitimate-task success ranged from **48/50 (96%)** for ML-layered to **50/50 (100%)** for baseline, authorization, and ML-only.
 
-```text
-six_defense_loader.py
-six_defense_statistics.py
-six_defense_dashboard.py
-sst2_analysis.py
-sst2_calibration.py
-sst2_selective.py
-sst2_dashboard.py
-```
+These are descriptive results from one evaluation per defense–scenario cell, not evidence of universal superiority. All five baseline-versus-defense attack comparisons had **Holm-adjusted p = 0.078125** and did not reach the 0.05 threshold. With only seven baseline successes, even the most favorable two-sided exact McNemar result is **2 × 0.5⁷ = 0.015625**; multiplying by five at the first Holm step gives **0.078125**. The study is therefore limited by statistical power; failure to reject does **not** establish absence of an effect.
 
-Under `data/`, add:
+### Clustered attacks and incomplete outcomes (original AgentSecBench study)
 
-```text
-six_defense_comparison.json
-benign_six_defense_comparison.json
-sst2_predictions.csv
-```
+In a **different study** involving 120 matched attacks derived from 30 source attack seeds, an authorization-policy defense was associated with a **61.7-percentage-point reduction** in observed attack success across **94 completed matched pairs** (baseline **61.7%**, defended **0%**). The source-cluster bootstrap 95% interval was approximately **56.9–65.9 percentage points**. Under extreme assignments for the **26 incomplete pairs**, improvement bounds were **35.8–65.8 percentage points**; these are sensitivity bounds, not confidence intervals.
 
-Under `tests/`, make sure `test_six_defense.py` and `test_sst2.py` are represented.
+The original study's **15/15 benign tasks succeeded under both baseline and defense**. This is a separate suite from the six-defense study's **50-task benign suite**, in which authorization also achieved **50/50** (exact two-sided 95% binomial CI approximately **92.9%–100%**). The two experiments' denominators and attack-success rates must not be combined.
 
-### Step 3 — Verify
+The narrow cluster-bootstrap interval describes variation under resampling of the **observed 30 source seeds**, not uncertainty about unseen attack families, model runs, or evaluation designs. Its width should not be interpreted as evidence of broad generalizability.
 
-Run:
-
-```powershell
-git diff --check
-git status --short
-```
-
-If `git diff --check` produces no output, the formatting is clean.
-
-Once you've made these changes, tell me **done**. Our next step will be a final reproducibility review and then pushing EvalScope to GitHub.
-
-## Key Finding
-
-In an AgentSecBench case study involving 120 matched attacks from 30 source attack seeds, a deterministic authorization-policy defense reduced observed attack success from **61.7% to 0.0%** across 94 completed matched pairs.
-
-The estimated reduction was 61.7 percentage points (source-cluster bootstrap 95% CI: approximately 56.9–65.9 percentage points). Accounting for 26 incomplete pairs, extreme missing-outcome assumptions produced improvement bounds of 35.8–65.8 percentage points.
-
-**The defense also preserved 100% benign-task success (15/15), matching the baseline (15/15), with no observed utility loss on the tested legitimate tasks.**
-
-These results support the effectiveness of the authorization policy within the evaluated benchmark. Generalization remains limited by the single underlying LLM, 30 source attack seeds, and a small benign-task suite.
-
-### Statistical Reliability, Robustness, and Predictive Modeling for LLM Benchmarks
-
-EvalScope is a Python framework for evaluating how reliable conclusions from large language model (LLM) benchmarks are. Rather than relying on a single accuracy or attack-success number, it examines uncertainty, paired outcomes, incomplete evaluations, ranking stability, subgroup differences, and predictive-model calibration.
-
-It includes an interactive Streamlit dashboard, automated Markdown research reports, reproducible analysis scripts, and automated tests.
+EvalScope combines paired comparisons, source-aware resampling, missing-outcome sensitivity analysis, predictive modeling, calibration diagnostics, and an interactive Streamlit dashboard to examine how reliable benchmark conclusions are.
 
 ## Research Questions
 
@@ -109,7 +65,6 @@ It includes an interactive Streamlit dashboard, automated Markdown research repo
 | Outputs | Streamlit dashboard, Markdown research reports, CSV exports, plots, reproducibility manifest |
 
 ## Architecture
-
 ```text
 Benchmark JSON
      |
@@ -145,7 +100,6 @@ EvalScope was applied to [AgentSecBench](https://github.com/hrittijab/AgentSecBe
 | Completed evaluations | 204 |
 | Fully completed matched pairs | 94 |
 | Incomplete matched pairs | 26 |
-
 | Configuration | Successful / completed | Observed attack success rate | Exact 95% CI |
 |---|---:|---:|---:|
 | Baseline | 58 / 99 | 58.6% | 48.2–68.4% |
@@ -167,22 +121,17 @@ Three classifiers were evaluated on completed, valid records using **five-fold s
 | Logistic regression | 0.9946 | 0.9819 | 0.0178 | 0.1055 |
 | Random forest | 0.9946 | 0.9819 | **0.0097** | **0.0427** |
 
-**Interpretation:** The models discriminate outcomes very well *within this benchmark*. Strong results are partly explained by pronounced outcome differences across attack categories and configurations. These models do not process attack text, and the experiment does not demonstrate transfer to new attack families, new LLMs, or unseen defense designs. Probability calibration is also assessed using out-of-fold calibration and distribution plots.
-
-
-
+**Interpretation:** The models discriminate outcomes very well **within this benchmark**. Strong results are partly explained by pronounced outcome differences across attack categories and configurations. These models do not process attack text, and the experiment does not demonstrate transfer to new attack families, new LLMs, or unseen defense designs. Probability calibration is also assessed using out-of-fold calibration and distribution plots.
 
 ## Extended Case Study: Six-Defense Security Evaluation
 
-EvalScope also evaluates six AI-agent security configurations across
-matched attack scenarios and benign tasks.
+EvalScope also evaluates six AI-agent security configurations across matched attack scenarios and benign tasks.
 
 The experiment contains:
 
 - 30 attack scenarios per defense (180 evaluations)
 - 50 benign tasks per defense (300 evaluations)
-- Six defense configurations: baseline, authorization,
-  prompt_guard, layered, ml_only, and ml_layered
+- Six defense configurations: baseline, authorization, prompt_guard, layered, ml_only, and ml_layered
 
 ### Observed Results
 
@@ -197,32 +146,20 @@ The experiment contains:
 
 ### Statistical Methods
 
-EvalScope uses matched-scenario comparisons to estimate differences
-in attack-success rates.
+EvalScope uses matched-scenario comparisons to estimate differences in attack-success rates.
 
 - Exact McNemar tests assess discordant paired outcomes.
 - Paired bootstrap intervals quantify uncertainty in observed differences.
-- Holm correction controls family-wise error across five
-  baseline-versus-defense comparisons.
-- Security–utility plots illustrate the tradeoff between blocking
-  attacks and preserving legitimate task completion.
+- Holm correction controls family-wise error across five baseline-versus-defense comparisons.
+- Security–utility plots illustrate the tradeoff between blocking attacks and preserving legitimate task completion.
 
-All five attack comparisons had Holm-adjusted p-values of 0.078125.
-Therefore, none reached the 0.05 significance threshold after
-multiple-comparison correction.
+All five baseline-versus-defense attack comparisons had **Holm-adjusted p = 0.078125** and did not reach the 0.05 threshold. With only seven baseline successes, even the smallest possible two-sided exact McNemar p-value is **2 × 0.5⁷ = 0.015625**; the first Holm adjustment across five comparisons gives **0.078125**. This is a limitation of statistical power, **not evidence that the defenses have no effect**.
 
-The results are descriptive evidence from a small benchmark,
-not proof that one defense is universally superior.
+Each defense–scenario cell was evaluated only once, so run-to-run model nondeterminism was not quantified. The findings describe this benchmark and should not be interpreted as universal defense rankings.
 
 ## Independent NLP Case Study: SST-2 Model Reliability
 
-EvalScope includes an independent sentiment-classification reliability
-analysis using 872 precomputed predictions matched to the official
-SST-2 validation examples.
-
-The public prediction source documents a DistilBERT SST-2 pipeline,
-although the exact checkpoint provenance of the saved predictions
-has not been independently verified.
+EvalScope also demonstrates reliability-analysis methods on **872 precomputed sentiment-classification predictions** matched to the official SST-2 validation examples. The public prediction source describes a DistilBERT SST-2 pipeline, but the exact checkpoint that produced the saved predictions **has not been independently verified**. This is an analysis of third-party predictions, not a claim of having rerun the model.
 
 ### Classification Performance
 
@@ -239,8 +176,7 @@ has not been independently verified.
 
 ### Selective Prediction
 
-EvalScope evaluates confidence-based abstention to measure the
-tradeoff between classification coverage and error rate.
+EvalScope evaluates confidence-based abstention to measure the tradeoff between classification coverage and error rate.
 
 | Confidence threshold | Coverage | Error rate |
 |---|---:|---:|
@@ -250,20 +186,15 @@ tradeoff between classification coverage and error rate.
 | 99% | 84.40% | 4.48% |
 | 99.5% | 79.47% | 3.03% |
 
-At a 99.5% confidence threshold, the observed error rate among
-accepted predictions falls from 8.94% to 3.03%, while approximately
-20.5% of examples are rejected.
+At a 99.5% confidence threshold, the observed error rate among accepted predictions falls from 8.94% to 3.03%, while approximately 20.5% of examples are rejected.
 
-This illustrates why classification accuracy alone is insufficient
-for evaluating model reliability in deployment settings.
+Mean confidence was **98.34%** despite **91.06%** accuracy, illustrating overconfidence and why classification accuracy alone is insufficient for evaluating model reliability in deployment settings.
 
 ### Limitations
 
-- The analysis uses one validation dataset and one set of
-  precomputed model predictions.
+- The analysis uses one validation dataset and one set of precomputed model predictions; the exact model checkpoint provenance is unverified.
 - Calibration estimates depend on the binning strategy.
-- Confidence-based abstention is evaluated retrospectively;
-  the thresholds were not validated on an independent test set.
+- Confidence-based abstention is evaluated retrospectively; the thresholds were not validated on an independent test set.
 - The analysis does not establish robustness under distribution shift.
 
 ### Reproducibility
@@ -278,11 +209,9 @@ The repository includes:
 - `tests/test_six_defense.py`
 - `tests/test_sst2.py`
 
-These files allow the extended analyses to be reproduced without
-running additional LLM inference.
+These files allow the extended analyses to be reproduced without running additional LLM inference.
 
 The complete automated test suite currently contains 82 passing tests.
-
 
 ## Dashboard Preview
 
@@ -306,7 +235,6 @@ The complete automated test suite currently contains 82 passing tests.
 
 ![Prediction Distributions](docs/screenshots/ss5.png)
 
-
 ## Technology Stack
 
 Python, NumPy, pandas, SciPy, scikit-learn, Matplotlib, Streamlit, pytest.
@@ -314,7 +242,6 @@ Python, NumPy, pandas, SciPy, scikit-learn, Matplotlib, Streamlit, pytest.
 ## Quick Start
 
 Requires Python 3.10 or newer.
-
 ```bash
 git clone https://github.com/hrittijab/EvalScope.git
 cd EvalScope
@@ -334,13 +261,11 @@ source .venv/bin/activate
 ```
 
 Install dependencies:
-
 ```bash
 python -m pip install -r requirements.txt
 ```
 
 ### Run the dashboard
-
 ```bash
 python -m streamlit run app.py
 ```
@@ -348,7 +273,6 @@ python -m streamlit run app.py
 Upload a compatible experiment JSON through the sidebar. If `data/agentsecbench_experiment.json` exists locally, the dashboard can load it as the default dataset.
 
 ### Generate synthetic demonstration data
-
 ```bash
 python -m scripts.generate_demo
 ```
@@ -356,7 +280,6 @@ python -m scripts.generate_demo
 The synthetic dataset (`data/demo_experiment.json`) contains 120 simulated attack cases, 30 source seeds, four configurations, and 480 evaluation records, including incomplete trials. **Synthetic results are illustrative, not evidence of real model or defense performance.**
 
 ### Reproduce statistical analysis
-
 ```bash
 python scripts/reproduce.py
 ```
@@ -366,7 +289,6 @@ The default demonstration writes statistical outputs to `results/demo/`. The man
 For a compatible custom dataset, consult the script's available CLI arguments; for the AgentSecBench case study, the workflow uses `baseline` and `defended` as the two configuration labels.
 
 ### Verify the end-to-end workflow
-
 ```bash
 python -m scripts.verify_project
 ```
@@ -374,7 +296,6 @@ python -m scripts.verify_project
 This verification script runs predictive evaluation, generates diagnostic plots, and produces a research report in `results/verification/` (provided the script and a compatible dataset are present).
 
 ### Run tests
-
 ```bash
 python -m pytest -q
 ```
@@ -396,7 +317,14 @@ EvalScope/
 │   ├── predictive_model.py
 │   ├── model_diagnostics.py
 │   ├── visualize.py
-│   └── report.py
+│   ├── report.py
+│   ├── six_defense_loader.py
+│   ├── six_defense_statistics.py
+│   ├── six_defense_dashboard.py
+│   ├── sst2_analysis.py
+│   ├── sst2_calibration.py
+│   ├── sst2_selective.py
+│   └── sst2_dashboard.py
 ├── scripts/
 │   ├── generate_demo.py
 │   ├── reproduce.py
@@ -404,24 +332,37 @@ EvalScope/
 │   ├── inspect_calibration.py
 │   └── verify_project.py
 ├── tests/
+│   ├── test_six_defense.py
+│   └── test_sst2.py
 ├── data/
-│   └── demo_experiment.json
-├── results/
+│   ├── demo_experiment.json
+│   ├── six_defense_comparison.json
+│   ├── benign_six_defense_comparison.json
+│   └── sst2_predictions.csv
+├── results/                       # Generated outputs (typically gitignored)
 ├── requirements.txt
 └── README.md
 ```
 
-Some paths depend on which optional scripts and generated artifacts have been created locally. The AgentSecBench case-study dataset may be excluded from version control; the synthetic demonstration supports public reproduction of the workflow, not independent reproduction of the real-data findings.
+The tree highlights the main modules and two new test files; additional test files may be present. The original AgentSecBench case-study dataset may be excluded from version control. The synthetic demonstration supports public reproduction of the analysis workflow, **not independent reproduction of the original real-data findings**. The six-defense and SST-2 analyses use the included data files without requiring additional LLM inference.
 
 ## Methodological Limitations
 
 1. **Correlated attacks:** Generated variants sharing source seeds are not necessarily independent. Cluster resampling mitigates, but does not eliminate, this concern.
+
 2. **Incomplete outcomes:** Timeouts and truncated evaluations may be missing non-randomly. Sensitivity bounds expose the range of possible conclusions under extreme assignments.
+
 3. **Finite benchmark coverage:** One model, benchmark, and deterministic defense policy cannot establish universal defense effectiveness.
+
 4. **Limited source clusters:** The case study has 30 source seeds, restricting precision and external validity.
+
 5. **Predictive generalization:** Group-aware cross-validation separates observed source seeds, but does not test transfer to unseen attack categories, models, or policies.
+
 6. **Statistical assumptions:** Exact binomial intervals and conventional McNemar tests rely on independence assumptions that may not hold for related attack variants.
+
 7. **Ranking interpretation:** Bootstrap best-rank frequencies measure resampling stability, not the probability of future superiority.
+8. **Single-run comparisons:** Each six-defense scenario/configuration cell was evaluated once; run-to-run LLM variability is unmeasured.
+9. **SST-2 provenance:** SST-2 metrics come from third-party saved predictions with an unverified exact checkpoint, not from a model inference run in this repository.
 
 ## Future Work
 

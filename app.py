@@ -835,6 +835,266 @@ else:
     )
 
 
+
+# ============================================================
+# SUBGROUP EFFECTIVENESS ANALYSIS
+# ============================================================
+
+from evalscope.subgroup_analysis import analyze_subgroups
+import matplotlib.pyplot as plt
+
+st.divider()
+st.header("Subgroup Effectiveness Analysis")
+
+st.write(
+    "Investigate how defense effectiveness varies across "
+    "attack categories using matched evaluations and "
+    "source-cluster bootstrap confidence intervals."
+)
+
+if len(analysis_modes) >= 2:
+
+    subgroup_bootstrap = st.slider(
+        "Subgroup bootstrap resamples",
+        min_value=200,
+        max_value=5000,
+        value=2000,
+        step=200,
+        key="subgroup_bootstrap",
+    )
+
+    if st.button("Run Subgroup Analysis"):
+
+        try:
+            with st.spinner("Analyzing attack categories..."):
+                subgroup_results = analyze_subgroups(
+                    df,
+                    mode_a=mode_a,
+                    mode_b=mode_b,
+                    group_column="category",
+                    n_bootstrap=subgroup_bootstrap,
+                    seed=42,
+                )
+
+            st.session_state["subgroup_results"] = (
+                subgroup_results
+            )
+            st.session_state["subgroup_modes"] = (
+                mode_a,
+                mode_b,
+            )
+            st.session_state["subgroup_experiment"] = (
+                df["experiment_id"].astype(str).unique().tolist()
+            )
+
+        except ValueError as exc:
+            st.error(f"Subgroup analysis unavailable: {exc}")
+
+    if (
+        "subgroup_results" in st.session_state
+        and st.session_state.get("subgroup_modes")
+        == (mode_a, mode_b)
+        and st.session_state.get("subgroup_experiment")
+        == df["experiment_id"].astype(str).unique().tolist()
+    ):
+
+        subgroup_results = st.session_state["subgroup_results"]
+
+        st.subheader("Category-Level Results")
+
+        display_df = subgroup_results.copy()
+
+        for column in (
+            "baseline_asr",
+            "defended_asr",
+            "improvement",
+            "ci_lower",
+            "ci_upper",
+        ):
+            display_df[column] = (
+                display_df[column] * 100
+            ).round(2)
+
+        display_df = display_df.rename(
+            columns={
+                "category": "Attack Category",
+                "n_pairs": "Completed Pairs",
+                "n_clusters": "Source Clusters",
+                "baseline_asr": f"{mode_a} ASR (%)",
+                "defended_asr": f"{mode_b} ASR (%)",
+                "improvement": "Improvement (pp)",
+                "ci_lower": "CI Lower (pp)",
+                "ci_upper": "CI Upper (pp)",
+                "warning": "Data Warning",
+            }
+        )
+
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        # --------------------------------------------
+        # Forest plot
+        # --------------------------------------------
+
+        st.subheader("Subgroup Improvement Forest Plot")
+
+        plot_df = subgroup_results.sort_values(
+            "improvement"
+        ).reset_index(drop=True)
+
+        fig, ax = plt.subplots(
+            figsize=(10, max(4, len(plot_df) * 0.7))
+        )
+
+        positions = range(len(plot_df))
+
+        for index, row in plot_df.iterrows():
+
+            improvement = row["improvement"] * 100
+
+            if (
+                pd.notna(row["ci_lower"])
+                and pd.notna(row["ci_upper"])
+            ):
+                lower_error = max(
+                    0,
+                    improvement - row["ci_lower"] * 100,
+                )
+                upper_error = max(
+                    0,
+                    row["ci_upper"] * 100 - improvement,
+                )
+
+                ax.errorbar(
+                    improvement,
+                    index,
+                    xerr=[
+                        [lower_error],
+                        [upper_error],
+                    ],
+                    fmt="o",
+                    capsize=4,
+                    color="#2563eb",
+                )
+            else:
+                ax.scatter(
+                    improvement,
+                    index,
+                    color="#2563eb",
+                )
+
+        ax.axvline(
+            0,
+            color="#6b7280",
+            linestyle="--",
+            linewidth=1,
+        )
+
+        ax.set_yticks(list(positions))
+
+        ax.set_yticklabels(
+            [
+                f"{row['category']} "
+                f"(n={row['n_pairs']})"
+                for _, row in plot_df.iterrows()
+            ]
+        )
+
+        ax.set_xlabel(
+            "Paired Attack-Success Reduction "
+            "(percentage points)"
+        )
+
+        ax.set_title(
+            "Defense Effectiveness by Attack Category"
+        )
+
+        ax.grid(
+            axis="x",
+            alpha=0.2,
+        )
+
+        fig.tight_layout()
+
+        st.pyplot(fig)
+        plt.close(fig)
+
+        st.caption(
+            "Intervals are percentile source-cluster "
+            "bootstrap intervals within each category. "
+            "They are exploratory, are not adjusted for "
+            "multiple comparisons, and may be unreliable "
+            "with few source clusters."
+        )
+
+        # --------------------------------------------
+        # Category inspection
+        # --------------------------------------------
+
+        st.subheader("Explore an Attack Category")
+
+        selected_category = st.selectbox(
+            "Choose a category",
+            options=subgroup_results["category"].tolist(),
+            key="subgroup_category_selector",
+        )
+
+        selected_row = subgroup_results[
+            subgroup_results["category"]
+            == selected_category
+        ].iloc[0]
+
+        c1, c2, c3 = st.columns(3)
+
+        c1.metric(
+            f"{mode_a} ASR",
+            f"{selected_row['baseline_asr'] * 100:.1f}%",
+        )
+
+        c2.metric(
+            f"{mode_b} ASR",
+            f"{selected_row['defended_asr'] * 100:.1f}%",
+        )
+
+        c3.metric(
+            "Paired Reduction",
+            f"{selected_row['improvement'] * 100:.1f} pp",
+        )
+
+        st.write(
+            f"**Completed matched attacks:** "
+            f"{selected_row['n_pairs']}"
+        )
+
+        st.write(
+            f"**Source clusters:** "
+            f"{selected_row['n_clusters']}"
+        )
+
+        if selected_row["warning"]:
+            st.warning(selected_row["warning"])
+
+        # --------------------------------------------
+        # CSV export
+        # --------------------------------------------
+
+        st.download_button(
+            "Download Subgroup Results (CSV)",
+            data=subgroup_results.to_csv(index=False),
+            file_name="evalscope_subgroup_analysis.csv",
+            mime="text/csv",
+        )
+
+else:
+    st.info(
+        "Upload a dataset with at least two configurations "
+        "to run subgroup analysis."
+    )
+
+
 # ============================================================
 # AUTOMATED RESEARCH REPORT
 # ============================================================
